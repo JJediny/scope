@@ -9,7 +9,7 @@ import { clickCloseTerminal } from '../actions/app-actions';
 import { getNeutralColor } from '../utils/color-utils';
 import { setDocumentTitle } from '../utils/title-utils';
 import { getPipeStatus, basePath } from '../utils/web-api-utils';
-import Term from '../vendor/term.js';
+import Term from 'xterm';
 
 const wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
 const wsUrl = `${wsProto}://${location.host}${basePath(location.pathname)}`;
@@ -109,7 +109,11 @@ class Terminal extends React.Component {
       log('socket closed');
       this.socket = null;
       const wereConnected = this.state.connected;
-      this.setState({connected: false});
+      if (this._isMounted) {
+        // Calling setState on an unmounted component will throw a warning.
+        // `connected` will get set to false by `componentWillUnmount`.
+        this.setState({connected: false});
+      }
       if (this.term && this.props.pipe.get('status') !== 'PIPE_DELETED') {
         if (wereConnected) {
           this.createWebsocket(term);
@@ -134,14 +138,15 @@ class Terminal extends React.Component {
   }
 
   componentDidMount() {
+    this._isMounted = true;
     const component = this;
 
     this.term = new Term({
       cols: this.state.cols,
       rows: this.state.rows,
-      convertEol: !this.props.raw
+      convertEol: !this.props.raw,
+      cursorBlink: true
     });
-
     const innerNode = ReactDOM.findDOMNode(component.inner);
     this.term.open(innerNode);
     this.term.on('data', (data) => {
@@ -167,6 +172,8 @@ class Terminal extends React.Component {
   }
 
   componentWillUnmount() {
+    this._isMounted = false;
+    this.setState({connected: false});
     log('cwu terminal');
 
     clearTimeout(this.reconnectTimeout);
